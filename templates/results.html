@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Call Results</title>
+  </head>
+  <body>
+    <h2>Call Results</h2>
+    <table border="1">
+      <tr><th>Number</th><th>Status</th><th>Details</th></tr>
+      {% for number, status, detail in results %}
+        <tr><td>{{ number }}</td><td>{{ status }}</td><td>{{ detail }}</td></tr>
+      {% endfor %}
+    </table>
+    <a href="/">Go Back</a>
+  </body>
+</html>
