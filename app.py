@@ -10,19 +10,21 @@ import io
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
-# Twilio Config
+# ✅ Twilio credentials
 account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
 auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
 from_number = os.environ.get("TWILIO_PHONE_NUMBER")
-websocket_url = os.environ.get("WS_STREAM_URL")  # e.g., wss://yourdomain.com:8765
+
+# ✅ Environment-based configuration
+websocket_url = os.environ.get("WS_STREAM_URL")              
+public_flask_domain = os.environ.get("PUBLIC_FLASK_URL")    
 
 client = Client(account_sid, auth_token)
 
-# In-memory queue
+# Call queue and state
 call_queue = deque()
 current_call_active = False
 
-# === Route: Upload CSV ===
 @app.route("/", methods=["GET", "POST"])
 def upload_file():
     global call_queue, current_call_active
@@ -42,15 +44,15 @@ def upload_file():
             csv_input = csv.DictReader(stream)
             for row in csv_input:
                 number = str(row["number"]).strip()
-                call_queue.append(number)
+                if number.startswith("+"):
+                    call_queue.append(number)
 
-            # Start first call
             if not current_call_active and call_queue:
                 next_number = call_queue.popleft()
                 place_call(next_number)
                 current_call_active = True
 
-            flash("CSV uploaded. Calling will begin.")
+            flash("CSV uploaded. Calls are being placed one by one.")
             return redirect(url_for("upload_file"))
 
         flash("Please upload a valid CSV file.")
@@ -59,22 +61,20 @@ def upload_file():
     return render_template("upload.html")
 
 
-# === Function: Place Call ===
 def place_call(to_number):
     print(f"📞 Calling {to_number}")
     call = client.calls.create(
         to=to_number,
         from_=from_number,
-        url="https://yourdomain.com/twiml-stream",  # Replace with your public domain
-        status_callback="https://yourdomain.com/status-callback",
+        url=f"{public_flask_domain}/twiml-stream",
+        status_callback=f"{public_flask_domain}/status-callback",
         status_callback_event=["completed"],
         status_callback_method="POST"
     )
-    print(f"📞 Call SID: {call.sid}")
+    print(f"✅ Call SID: {call.sid}")
 
 
-# === Route: Return TwiML to Connect Call to WebSocket ===
-@app.route("/twiml-stream", methods=["GET", "POST"])
+@app.route("/twiml-stream", methods=["POST"])
 def twiml_stream():
     response = VoiceResponse()
     connect = Connect()
@@ -83,12 +83,11 @@ def twiml_stream():
     return Response(str(response), mimetype="application/xml")
 
 
-# === Route: Call Completion Handler ===
 @app.route("/status-callback", methods=["POST"])
 def status_callback():
     global current_call_active
 
-    print("🛑 Call ended. Checking queue.")
+    print("🛑 Call ended. Starting next.")
     current_call_active = False
 
     if call_queue:
