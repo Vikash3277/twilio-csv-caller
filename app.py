@@ -10,6 +10,11 @@ import io
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
+# ✅ Twilio credentials from environment
+account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+from_number = os.environ.get("TWILIO_PHONE_NUMBER")
+
 # ✅ AI agent (media.py) WebSocket and your Flask public URL from environment
 websocket_url = os.environ.get("WS_STREAM_URL")               # e.g. wss://xxxx.ngrok-free.app
 public_flask_domain = os.environ.get("PUBLIC_FLASK_URL")     # e.g. https://your-render-app.onrender.com
