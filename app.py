@@ -10,14 +10,14 @@ import io
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
-# ✅ Twilio credentials
+# ✅ Twilio credentials from environment
 account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
 auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
 from_number = os.environ.get("TWILIO_PHONE_NUMBER")
 
-# ✅ Environment-based configuration
-websocket_url = os.environ.get("WS_STREAM_URL")              
-public_flask_domain = os.environ.get("PUBLIC_FLASK_URL")    
+# ✅ AI agent (media.py) WebSocket and your Flask public URL from environment
+websocket_url = os.environ.get("WS_STREAM_URL")               # e.g. wss://xxxx.ngrok-free.app
+public_flask_domain = os.environ.get("PUBLIC_FLASK_URL")     # e.g. https://your-render-app.onrender.com
 
 client = Client(account_sid, auth_token)
 
@@ -40,26 +40,27 @@ def upload_file():
             return redirect(request.url)
 
         if file and file.filename.endswith(".csv"):
-    stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
-    csv_input = csv.DictReader(stream)
+            stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+            csv_input = csv.DictReader(stream)
 
-    for row in csv_input:
-        number = str(row.get("number", "")).strip()
-        
-        # Auto prepend '+' if it's missing and number is 10+ digits
-        if number and not number.startswith("+") and number.isdigit():
-            if number.startswith("1") and len(number) == 11:
-                number = "+" + number  # US number (1XXXXXXXXXX)
-            elif number.startswith("91") and len(number) == 12:
-                number = "+" + number  # India number (91XXXXXXXXXX)
-        
-        if number.startswith("+"):
-            call_queue.append(number)
+            for row in csv_input:
+                number = str(row.get("number", "")).strip()
 
-    if not current_call_active and call_queue:
-        next_number = call_queue.popleft()
-        place_call(next_number)
-        current_call_active = True
+                # 🔧 Auto prepend '+' if missing and number is numeric
+                if number and not number.startswith("+") and number.isdigit():
+                    if number.startswith("1") and len(number) == 11:
+                        number = "+" + number      # US format
+                    elif number.startswith("91") and len(number) == 12:
+                        number = "+" + number      # India format
+
+                # ✅ Add only properly formatted E.164 numbers
+                if number.startswith("+"):
+                    call_queue.append(number)
+
+            if not current_call_active and call_queue:
+                next_number = call_queue.popleft()
+                place_call(next_number)
+                current_call_active = True
 
             flash("CSV uploaded. Calls are being placed one by one.")
             return redirect(url_for("upload_file"))
