@@ -40,17 +40,26 @@ def upload_file():
             return redirect(request.url)
 
         if file and file.filename.endswith(".csv"):
-            stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
-            csv_input = csv.DictReader(stream)
-            for row in csv_input:
-                number = str(row["number"]).strip()
-                if number.startswith("+"):
-                    call_queue.append(number)
+    stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+    csv_input = csv.DictReader(stream)
 
-            if not current_call_active and call_queue:
-                next_number = call_queue.popleft()
-                place_call(next_number)
-                current_call_active = True
+    for row in csv_input:
+        number = str(row.get("number", "")).strip()
+        
+        # Auto prepend '+' if it's missing and number is 10+ digits
+        if number and not number.startswith("+") and number.isdigit():
+            if number.startswith("1") and len(number) == 11:
+                number = "+" + number  # US number (1XXXXXXXXXX)
+            elif number.startswith("91") and len(number) == 12:
+                number = "+" + number  # India number (91XXXXXXXXXX)
+        
+        if number.startswith("+"):
+            call_queue.append(number)
+
+    if not current_call_active and call_queue:
+        next_number = call_queue.popleft()
+        place_call(next_number)
+        current_call_active = True
 
             flash("CSV uploaded. Calls are being placed one by one.")
             return redirect(url_for("upload_file"))
