@@ -1,13 +1,23 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <title>Upload CSV - AI Voice Agent</title>
-  </head>
-  <body>
-    <h2>Upload CSV to Trigger Calls</h2>
-    <form method="POST" enctype="multipart/form-data">
-      <input type="file" name="file" accept=".csv" required>
-      <button type="submit">Upload and Start Calls</button>
-    </form>
-  </body>
+<head>
+  <title>Upload CSV</title>
+</head>
+<body>
+  <h2>Upload CSV to Start AI Calls</h2>
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <ul>
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+  <form method="POST" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".csv" required>
+    <button type="submit">Upload</button>
+  </form>
+  <p><strong>Note:</strong> CSV must contain a <code>number</code> column with full E.164 numbers (+1, +91, etc).</p>
+</body>
 </html>
