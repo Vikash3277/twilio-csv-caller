@@ -83,7 +83,6 @@ def place_call(to_number):
     )
     print(f"✅ Call SID: {call.sid}")
 
-
 @app.route("/twiml-stream", methods=["POST"])
 def twiml_stream():
     response = VoiceResponse()
@@ -91,9 +90,7 @@ def twiml_stream():
     connect = Connect()
     connect.stream(
         url=websocket_url,
-        track="both",              # Enables 2-way audio (caller <-> AI)
-        audio="mulaw",             # Match μ-law format expected by your AI server
-        sampling_rate="8000"       # Ensure 8kHz audio for telephony
+        track="both"  # Only this attribute is supported
     )
 
     response.append(connect)
