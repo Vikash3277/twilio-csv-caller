@@ -83,16 +83,12 @@ def place_call(to_number):
     )
     print(f"✅ Call SID: {call.sid}")
 
+
 @app.route("/twiml-stream", methods=["POST"])
 def twiml_stream():
     response = VoiceResponse()
-
     connect = Connect()
-    connect.stream(
-        url=websocket_url,
-        track="both"  # Only this attribute is supported
-    )
-
+    connect.stream(url=websocket_url)
     response.append(connect)
     return Response(str(response), mimetype="application/xml")
 
