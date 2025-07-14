@@ -10,18 +10,16 @@ import io
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
-# ✅ Twilio credentials from environment
+# ✅ Load credentials and URLs from environment
 account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
 auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
 from_number = os.environ.get("TWILIO_PHONE_NUMBER")
-
-# ✅ AI agent (media.py) WebSocket and your Flask public URL from environment
-websocket_url = os.environ.get("WS_STREAM_URL")               # e.g. wss://xxxx.ngrok-free.app
-public_flask_domain = os.environ.get("PUBLIC_FLASK_URL")     # e.g. https://your-render-app.onrender.com
+websocket_url = os.environ.get("WS_STREAM_URL")               # e.g. wss://your-media-server.onrender.com/ws
+public_flask_domain = os.environ.get("PUBLIC_FLASK_URL")     # e.g. https://your-flask-app.onrender.com
 
 client = Client(account_sid, auth_token)
 
-# Call queue and state
+# Call queue
 call_queue = deque()
 current_call_active = False
 
@@ -46,14 +44,13 @@ def upload_file():
             for row in csv_input:
                 number = str(row.get("number", "")).strip()
 
-                # 🔧 Auto prepend '+' if missing and number is numeric
+                # Auto prepend country code if needed
                 if number and not number.startswith("+") and number.isdigit():
                     if number.startswith("1") and len(number) == 11:
-                        number = "+" + number      # US format
+                        number = "+" + number
                     elif number.startswith("91") and len(number) == 12:
-                        number = "+" + number      # India format
+                        number = "+" + number
 
-                # ✅ Add only properly formatted E.164 numbers
                 if number.startswith("+"):
                     call_queue.append(number)
 
@@ -62,10 +59,10 @@ def upload_file():
                 place_call(next_number)
                 current_call_active = True
 
-            flash("CSV uploaded. Calls are being placed one by one.")
+            flash("✅ CSV uploaded. Calling numbers one by one.")
             return redirect(url_for("upload_file"))
 
-        flash("Please upload a valid CSV file.")
+        flash("❌ Please upload a valid CSV file.")
         return redirect(request.url)
 
     return render_template("upload.html")
@@ -88,7 +85,7 @@ def place_call(to_number):
 def twiml_stream():
     response = VoiceResponse()
     connect = Connect()
-    connect.stream(url=websocket_url, track="both_tracks")  # ✅ Required for bi-directional streaming
+    connect.stream(url=websocket_url, track="both_tracks")  # ✅ bi-directional required
     response.append(connect)
     print("✅ Returning TwiML with WebSocket stream")
     return Response(str(response), mimetype="application/xml")
