@@ -88,7 +88,7 @@ def twiml_stream():
 
     response = VoiceResponse()
     connect = Connect()
-    stream = Stream(url=websocket_url, track="outbound")  # ✅ Correct and supported
+    stream = Stream(url=websocket_url)
     connect.append(stream)
     response.append(connect)
 
