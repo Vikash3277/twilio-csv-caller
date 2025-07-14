@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, redirect, url_for, flash, Response
 from twilio.rest import Client
-from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
+from twilio.twiml.voice_response import VoiceResponse, Connect
 from collections import deque
 import pandas as pd
 import os
@@ -88,9 +88,15 @@ def place_call(to_number):
 def twiml_stream():
     response = VoiceResponse()
     connect = Connect()
-    connect.stream(url=websocket_url,)  # ✅ Correct track
+    connect.stream(url=WEBSOCKET_URL, track="audio")  # ✅ Required for bi-directional streaming
     response.append(connect)
+    print("✅ Returning TwiML with WebSocket stream")
     return Response(str(response), mimetype="application/xml")
+
+# Optional health check
+@app.route("/", methods=["GET"])
+def home():
+    return "✅ Flask TwiML Server OK"
 
 
 @app.route("/status-callback", methods=["POST"])
