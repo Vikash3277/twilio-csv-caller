@@ -88,7 +88,7 @@ def place_call(to_number):
 def twiml_stream():
     response = VoiceResponse()
     connect = Connect()
-    connect.stream(url=WEBSOCKET_URL, track="audio")  # ✅ Required for bi-directional streaming
+    connect.stream(url=websocket_url, track="audio")  # ✅ Required for bi-directional streaming
     response.append(connect)
     print("✅ Returning TwiML with WebSocket stream")
     return Response(str(response), mimetype="application/xml")
