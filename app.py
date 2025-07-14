@@ -83,11 +83,17 @@ def place_call(to_number):
 
 @app.route("/twiml-stream", methods=["POST"])
 def twiml_stream():
+    print("✅ Generating TwiML stream")
+    print(f"🔗 WebSocket URL: {websocket_url}")
+
     response = VoiceResponse()
+    stream = Stream(url=websocket_url)
+    stream.set("track", "both_tracks")  # ✅ safest way to inject the track manually
     connect = Connect()
-    connect.stream(url=websocket_url, track="both_tracks")  # ✅ bi-directional required
+    connect.append(stream)
     response.append(connect)
-    print("✅ Returning TwiML with WebSocket stream")
+
+    print(f"📝 TwiML Response:\n{str(response)}")
     return Response(str(response), mimetype="application/xml")
 
 
