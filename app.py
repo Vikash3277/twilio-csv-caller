@@ -87,14 +87,14 @@ def twiml_stream():
     print(f"🔗 WebSocket URL: {websocket_url}")
 
     response = VoiceResponse()
-    stream = Stream(url=websocket_url)
-    stream.set("track", "both_tracks")  # ✅ safest way to inject the track manually
     connect = Connect()
+    stream = Stream(url=websocket_url, track="both_tracks")  # ✅ Correct and supported
     connect.append(stream)
     response.append(connect)
 
     print(f"📝 TwiML Response:\n{str(response)}")
     return Response(str(response), mimetype="application/xml")
+
 
 
 @app.route("/status-callback", methods=["POST"])
