@@ -93,11 +93,6 @@ def twiml_stream():
     print("✅ Returning TwiML with WebSocket stream")
     return Response(str(response), mimetype="application/xml")
 
-# Optional health check
-@app.route("/", methods=["GET"])
-def home():
-    return "✅ Flask TwiML Server OK"
-
 
 @app.route("/status-callback", methods=["POST"])
 def status_callback():
