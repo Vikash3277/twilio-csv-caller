@@ -88,7 +88,7 @@ def place_call(to_number):
 def twiml_stream():
     response = VoiceResponse()
     connect = Connect()
-    connect.stream(url=websocket_url, track="audio")  # ✅ Correct track
+    connect.stream(url=websocket_url,)  # ✅ Correct track
     response.append(connect)
     return Response(str(response), mimetype="application/xml")
 
