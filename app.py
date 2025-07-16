@@ -95,6 +95,7 @@ def process():
         return Response(str(res), mimetype="application/xml")
 
 
+
 @app.route("/callback", methods=["POST"])
 def callback():
     print("📞 Call ended.")
@@ -162,18 +163,26 @@ def generate_tts_mp3(text):
             }
         }
 
-        res = requests.post(url, headers=headers, json=payload)
+        start = time.time()
+        res = requests.post(url, headers=headers, json=payload, timeout=30)
+        print(f"🕒 ElevenLabs TTS took {time.time() - start:.2f}s")
+
         if res.status_code == 200:
-            filename = f"audio_{int(time.time())}.mp3"
+            filename = f"audio_{int(time.time() * 1000)}.mp3"
             full_path = os.path.join(VOICE_DIR, filename)
             with open(full_path, "wb") as f:
                 f.write(res.content)
             return f"{FLASK_DOMAIN}/audio/{filename}"
         else:
             print("❌ ElevenLabs error:", res.text)
+
+    except requests.exceptions.Timeout:
+        print("❌ ElevenLabs request timed out.")
     except Exception as e:
-        print(f"❌ TTS generation failed: {e}")
+        print(f"❌ TTS generation failed: {type(e).__name__}: {e}")
+
     return None
+
 
 
 if __name__ == "__main__":
