@@ -10,12 +10,12 @@ import io
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
-# ✅ Load credentials and URLs from environment
+# ✅ Load from environment variables
 account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
 auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
 from_number = os.environ.get("TWILIO_PHONE_NUMBER")
-websocket_url = os.environ.get("WS_STREAM_URL")               # e.g. wss://your-media-server.onrender.com/ws
-public_flask_domain = os.environ.get("PUBLIC_FLASK_URL")     # e.g. https://your-flask-app.onrender.com
+websocket_url = os.environ.get("WS_STREAM_URL")               # e.g. wss://your-server.com/ws
+public_flask_domain = os.environ.get("PUBLIC_FLASK_URL")     # e.g. https://your-flask-app.com
 
 client = Client(account_sid, auth_token)
 
@@ -43,8 +43,6 @@ def upload_file():
 
             for row in csv_input:
                 number = str(row.get("number", "")).strip()
-
-                # Auto prepend country code if needed
                 if number and not number.startswith("+") and number.isdigit():
                     if number.startswith("1") and len(number) == 11:
                         number = "+" + number
@@ -87,8 +85,10 @@ def twiml_stream():
     print(f"🔗 WebSocket URL: {websocket_url}")
 
     response = VoiceResponse()
+    response.say("Hello, connecting you to your logistics assistant.")  # optional intro
+
     connect = Connect()
-    stream = Stream(url=websocket_url, track="inbound_track")
+    stream = Stream(url=websocket_url, track="both_tracks")  # ✅ 2-way audio
     connect.append(stream)
     response.append(connect)
 
@@ -96,10 +96,10 @@ def twiml_stream():
     return Response(str(response), mimetype="application/xml")
 
 
-
 @app.route("/status-callback", methods=["POST"])
 def status_callback():
     global current_call_active
+    print("📞 Status callback:", request.form)
 
     print("🛑 Call ended. Starting next.")
     current_call_active = False
