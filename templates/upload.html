@@ -1,10 +1,10 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-  <title>Upload CSV</title>
+  <title>CSV Caller</title>
 </head>
 <body>
-  <h2>Upload CSV to Start AI Calls</h2>
+  <h1>Upload CSV</h1>
   {% with messages = get_flashed_messages() %}
     {% if messages %}
       <ul>
@@ -14,10 +14,9 @@
       </ul>
     {% endif %}
   {% endwith %}
-  <form method="POST" enctype="multipart/form-data">
-    <input type="file" name="file" accept=".csv" required>
-    <button type="submit">Upload</button>
+  <form method="post" enctype="multipart/form-data">
+    <input type="file" name="file">
+    <input type="submit" value="Upload & Call">
   </form>
-  <p><strong>Note:</strong> CSV must contain a <code>number</code> column with full E.164 numbers (+1, +91, etc).</p>
 </body>
 </html>
