@@ -4,10 +4,10 @@ import io
 import time
 import threading
 from flask import Flask, request, render_template, Response, send_from_directory
-from twilio.rest import Client
+from twilio.rest import Client as TwilioClient
 from twilio.twiml.voice_response import VoiceResponse, Play, Gather
 import requests
-import openai import OpenAI
+from openai import OpenAI  # ✅ fixed import
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
@@ -23,9 +23,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
 
-openai.api_key = OPENAI_API_KEY
-client = Client(TWILIO_SID, TWILIO_AUTH)
-client = OpenAI()
+# ✅ Clients
+twilio_client = TwilioClient(TWILIO_SID, TWILIO_AUTH)
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 call_queue = []
 is_calling = False
@@ -118,7 +118,7 @@ def call_next():
         number = call_queue.pop(0)
         print(f"📞 Calling {number}")
         try:
-            client.calls.create(
+            twilio_client.calls.create(
                 to=number,
                 from_=TWILIO_NUMBER,
                 url=f"{FLASK_DOMAIN}/voice",
@@ -133,7 +133,7 @@ def call_next():
 
 def gpt_response(prompt):
     try:
-        res = client.chat.completions.create(
+        res = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You're a dispatch assistant. Explain your low-cost dispatch service and how it works."},
