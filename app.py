@@ -3,11 +3,12 @@ import csv
 import io
 import time
 import threading
+from urllib.parse import quote, unquote
 from flask import Flask, request, render_template, Response, send_from_directory
 from twilio.rest import Client as TwilioClient
 from twilio.twiml.voice_response import VoiceResponse, Play, Gather
 import requests
-from openai import OpenAI  # ✅ fixed import
+from openai import OpenAI
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
@@ -23,7 +24,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
 
-# ✅ Clients
+# === Clients
 twilio_client = TwilioClient(TWILIO_SID, TWILIO_AUTH)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -57,16 +58,17 @@ def voice():
         "If you have any questions, just ask now."
     )
     mp3_url = generate_tts_mp3(ai_text)
-    
+
     response = VoiceResponse()
     if mp3_url:
         response.play(mp3_url)
     else:
         response.say(ai_text)
-    
+
     gather = Gather(input="speech", action="/process", timeout=6)
     gather.say("How can I help you?")
     response.append(gather)
+
     response.say("Thank you for your time. Goodbye.")
     response.hangup()
     return Response(str(response), mimetype="application/xml")
@@ -79,14 +81,12 @@ def process():
 
     if speech:
         reply = gpt_response(speech)
-        mp3_url = generate_tts_mp3(reply)
+        encoded = quote(reply)
 
+        # Respond immediately to avoid Twilio timeout
         response = VoiceResponse()
-        if mp3_url:
-            response.play(mp3_url)
-        else:
-            response.say(reply)
-        response.hangup()
+        response.say("Please hold while I prepare your answer.")
+        response.redirect(f"/speak?text={encoded}")
         return Response(str(response), mimetype="application/xml")
     else:
         res = VoiceResponse()
@@ -94,6 +94,20 @@ def process():
         res.hangup()
         return Response(str(res), mimetype="application/xml")
 
+
+@app.route("/speak", methods=["GET", "POST"])
+def speak():
+    text = request.args.get("text", "")
+    decoded = unquote(text)
+    mp3_url = generate_tts_mp3(decoded)
+
+    response = VoiceResponse()
+    if mp3_url:
+        response.play(mp3_url)
+    else:
+        response.say(decoded)
+    response.hangup()
+    return Response(str(response), mimetype="application/xml")
 
 
 @app.route("/callback", methods=["POST"])
@@ -164,7 +178,7 @@ def generate_tts_mp3(text):
         }
 
         start = time.time()
-        res = requests.post(url, headers=headers, json=payload, timeout=30)
+        res = requests.post(url, headers=headers, json=payload, timeout=40)
         print(f"🕒 ElevenLabs TTS took {time.time() - start:.2f}s")
 
         if res.status_code == 200:
@@ -182,7 +196,6 @@ def generate_tts_mp3(text):
         print(f"❌ TTS generation failed: {type(e).__name__}: {e}")
 
     return None
-
 
 
 if __name__ == "__main__":
