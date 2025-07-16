@@ -1,115 +1,158 @@
-from flask import Flask, request, render_template, redirect, url_for, flash, Response
-from twilio.rest import Client
-from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
-from collections import deque
-import pandas as pd
 import os
 import csv
 import io
+import threading
+from flask import Flask, request, render_template, Response
+from twilio.rest import Client
+from twilio.twiml.voice_response import VoiceResponse, Play, Gather
+import requests
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
-# ✅ Load from environment variables
-account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
-auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
-from_number = os.environ.get("TWILIO_PHONE_NUMBER")
-websocket_url = os.environ.get("WS_STREAM_URL")               # e.g. wss://your-server.com/ws
-public_flask_domain = os.environ.get("PUBLIC_FLASK_URL")     # e.g. https://your-flask-app.com
+# Env vars
+TWILIO_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH = os.environ.get("TWILIO_AUTH_TOKEN")
+TWILIO_NUMBER = os.environ.get("TWILIO_CALLER_ID")
+FLASK_DOMAIN = os.environ.get("PUBLIC_FLASK_URL")  # e.g. https://your-app.onrender.com
+VOICE_MP3_URL = os.environ.get("AI_PITCH_MP3_URL")  # e.g. from ElevenLabs
 
-client = Client(account_sid, auth_token)
+client = Client(TWILIO_SID, TWILIO_AUTH)
 
-# Call queue
-call_queue = deque()
-current_call_active = False
+# Store numbers and call state
+call_queue = []
+is_calling = False
+
 
 @app.route("/", methods=["GET", "POST"])
-def upload_file():
-    global call_queue, current_call_active
+def index():
+    global call_queue, is_calling
 
     if request.method == "POST":
-        if "file" not in request.files:
-            flash("No file part")
-            return redirect(request.url)
-
-        file = request.files["file"]
-        if file.filename == "":
-            flash("No selected file")
-            return redirect(request.url)
-
+        file = request.files.get("file")
         if file and file.filename.endswith(".csv"):
             stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
-            csv_input = csv.DictReader(stream)
-
-            for row in csv_input:
-                number = str(row.get("number", "")).strip()
-                if number and not number.startswith("+") and number.isdigit():
-                    if number.startswith("1") and len(number) == 11:
-                        number = "+" + number
-                    elif number.startswith("91") and len(number) == 12:
-                        number = "+" + number
-
-                if number.startswith("+"):
-                    call_queue.append(number)
-
-            if not current_call_active and call_queue:
-                next_number = call_queue.popleft()
-                place_call(next_number)
-                current_call_active = True
-
-            flash("✅ CSV uploaded. Calling numbers one by one.")
-            return redirect(url_for("upload_file"))
-
-        flash("❌ Please upload a valid CSV file.")
-        return redirect(request.url)
-
+            reader = csv.DictReader(stream)
+            call_queue = [row["number"].strip() for row in reader if row.get("number")]
+            threading.Thread(target=call_next).start()
+            return render_template("upload.html", status=f"✅ {len(call_queue)} numbers queued.")
+        return render_template("upload.html", status="❌ Invalid file.")
     return render_template("upload.html")
 
 
-def place_call(to_number):
-    print(f"📞 Calling {to_number}")
-    call = client.calls.create(
-        to=to_number,
-        from_=from_number,
-        url=f"{public_flask_domain}/twiml-stream",
-        status_callback=f"{public_flask_domain}/status-callback",
-        status_callback_event=["completed"],
-        status_callback_method="POST"
-    )
-    print(f"✅ Call SID: {call.sid}")
+def call_next():
+    global is_calling
+    if is_calling or not call_queue:
+        return
+    is_calling = True
+    while call_queue:
+        number = call_queue.pop(0)
+        print(f"📞 Calling {number}")
+        try:
+            client.calls.create(
+                to=number,
+                from_=TWILIO_NUMBER,
+                url=f"{FLASK_DOMAIN}/voice",
+                status_callback=f"{FLASK_DOMAIN}/callback",
+                status_callback_method="POST",
+                status_callback_event=["completed"]
+            )
+        except Exception as e:
+            print(f"❌ Failed to call {number}: {e}")
+    is_calling = False
 
 
-@app.route("/twiml-stream", methods=["POST"])
-def twiml_stream():
-    print("✅ Generating TwiML stream")
-    print(f"🔗 WebSocket URL: {websocket_url}")
-
+@app.route("/voice", methods=["POST"])
+def voice():
     response = VoiceResponse()
-    response.say("Hello, connecting you to your logistics assistant.")  # optional intro
-
-    connect = Connect()
-    stream = Stream(url=websocket_url, track="both_tracks")  # ✅ 2-way audio
-    connect.append(stream)
-    response.append(connect)
-
-    print(f"📝 TwiML Response:\n{str(response)}")
+    if VOICE_MP3_URL:
+        response.play(VOICE_MP3_URL)
+    gather = Gather(input="speech", action="/process", timeout=5)
+    gather.say("If you have any questions about our dispatch service, feel free to ask.")
+    response.append(gather)
+    response.say("Thank you for your time. Goodbye!")
+    response.hangup()
     return Response(str(response), mimetype="application/xml")
 
 
-@app.route("/status-callback", methods=["POST"])
-def status_callback():
-    global current_call_active
-    print("📞 Status callback:", request.form)
+@app.route("/process", methods=["POST"])
+def process():
+    speech = request.form.get("SpeechResult", "")
+    print(f"🗣️ Customer asked: {speech}")
 
-    print("🛑 Call ended. Starting next.")
-    current_call_active = False
+    if speech:
+        # Call GPT-4o to generate response
+        reply = gpt_response(speech)
+        # Use ElevenLabs to get TTS audio
+        mp3_url = generate_tts_mp3(reply)
+        response = VoiceResponse()
+        if mp3_url:
+            response.play(mp3_url)
+        else:
+            response.say(reply)
+        response.hangup()
+        return Response(str(response), mimetype="application/xml")
+    else:
+        res = VoiceResponse()
+        res.say("Sorry, I didn't catch that. Goodbye.")
+        res.hangup()
+        return Response(str(res), mimetype="application/xml")
 
-    if call_queue:
-        next_number = call_queue.popleft()
-        place_call(next_number)
-        current_call_active = True
 
-    return "OK", 200
+@app.route("/callback", methods=["POST"])
+def callback():
+    print("📞 Call ended.")
+    call_next()  # Trigger next call if any
+    return "OK"
+
+
+def gpt_response(prompt):
+    import openai
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    res = openai.ChatCompletion.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are a helpful dispatch assistant. Explain dispatch service charges to truckers."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return res.choices[0].message.content
+
+
+def generate_tts_mp3(text):
+    eleven_key = os.getenv("ELEVENLABS_API_KEY")
+    voice_id = os.getenv("ELEVENLABS_VOICE_ID")
+
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    headers = {
+        "xi-api-key": eleven_key,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "text": text,
+        "model_id": "eleven_monolingual_v1",
+        "voice_settings": {
+            "stability": 0.5,
+            "similarity_boost": 0.75
+        }
+    }
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code == 200:
+            filename = f"audio_{int(time.time())}.mp3"
+            with open(filename, "wb") as f:
+                f.write(response.content)
+            return f"{FLASK_DOMAIN}/audio/{filename}"
+        else:
+            print("❌ TTS failed:", response.text)
+    except Exception as e:
+        print("❌ TTS error:", e)
+    return None
+
+
+@app.route("/audio/<filename>")
+def serve_audio(filename):
+    return app.send_static_file(filename)
 
 
 if __name__ == "__main__":
