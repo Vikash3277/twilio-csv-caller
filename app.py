@@ -7,7 +7,7 @@ from flask import Flask, request, render_template, Response, send_from_directory
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Play, Gather
 import requests
-import openai
+import openai import OpenAI
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
@@ -25,6 +25,7 @@ ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
 
 openai.api_key = OPENAI_API_KEY
 client = Client(TWILIO_SID, TWILIO_AUTH)
+client = OpenAI()
 
 call_queue = []
 is_calling = False
@@ -132,7 +133,7 @@ def call_next():
 
 def gpt_response(prompt):
     try:
-        res = openai.ChatCompletion.create(
+        res = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You're a dispatch assistant. Explain your low-cost dispatch service and how it works."},
