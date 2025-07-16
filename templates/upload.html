@@ -1,22 +1,17 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>CSV Caller</title>
-</head>
-<body>
-  <h1>Upload CSV</h1>
-  {% with messages = get_flashed_messages() %}
-    {% if messages %}
-      <ul>
-        {% for message in messages %}
-          <li>{{ message }}</li>
-        {% endfor %}
-      </ul>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Upload Leads</title>
+  </head>
+  <body>
+    <h2>📤 Upload Phone Numbers CSV</h2>
+    <form method="POST" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".csv" required>
+      <button type="submit">Upload & Start Calls</button>
+    </form>
+    {% if status %}
+      <p>{{ status }}</p>
     {% endif %}
-  {% endwith %}
-  <form method="post" enctype="multipart/form-data">
-    <input type="file" name="file">
-    <input type="submit" value="Upload & Call">
-  </form>
-</body>
+  </body>
 </html>
