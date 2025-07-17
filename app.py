@@ -22,7 +22,7 @@ client = Client(TWILIO_SID, TWILIO_AUTH)
 # ✅ Home page
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("upload.html")
 
 # ✅ Upload CSV and start calls
 @app.route("/upload", methods=["POST"])
