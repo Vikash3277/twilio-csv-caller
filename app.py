@@ -3,178 +3,67 @@ import csv
 import io
 import time
 import threading
-from flask import Flask, request, render_template, Response, send_from_directory
+from flask import Flask, request, render_template, Response
 from twilio.rest import Client
-from twilio.twiml.voice_response import VoiceResponse, Play, Gather
-import requests
-import openai
+from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
+import pandas as pd
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
-# === Environment variables ===
+# ✅ Load environment variables
 TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_NUMBER = os.getenv("TWILIO_CALLER_ID")
 FLASK_DOMAIN = os.getenv("PUBLIC_FLASK_URL")
-VOICE_DIR = "static/audio"
+MEDIA_SERVER_URL = os.getenv("MEDIA_SERVER_WSS")  # e.g. wss://your-domain.onrender.com/ws
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
-
-openai.api_key = OPENAI_API_KEY
 client = Client(TWILIO_SID, TWILIO_AUTH)
 
-call_queue = []
-is_calling = False
-
-# === Routes ===
-
-@app.route("/", methods=["GET", "POST"])
+# ✅ Home page to upload CSV
+@app.route("/")
 def index():
-    global call_queue, is_calling
+    return render_template("index.html")
 
-    if request.method == "POST":
-        file = request.files.get("file")
-        if file and file.filename.endswith(".csv"):
-            stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
-            reader = csv.DictReader(stream)
-            call_queue = [row["number"].strip() for row in reader if row.get("number")]
-            threading.Thread(target=call_next).start()
-            return render_template("upload.html", status=f"✅ {len(call_queue)} numbers queued.")
-        return render_template("upload.html", status="❌ Invalid file.")
-    return render_template("upload.html")
+# ✅ Upload CSV and start calls
+@app.route("/upload", methods=["POST"])
+def upload():
+    file = request.files["file"]
+    if not file:
+        return "No file uploaded"
 
+    stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+    csv_input = csv.reader(stream)
+    numbers = [row[0] for row in csv_input if row]
 
-@app.route("/voice", methods=["POST"])
-def voice():
-    print("📢 AI Intro started")
-    ai_text = (
-        "Hi there! We offer affordable dispatch services to truckers like you. "
-        "For example, on a load paying $4000, we charge just $50. "
-        "If you have any questions, just ask now."
-    )
-    mp3_url = generate_tts_mp3(ai_text)
-    
-    response = VoiceResponse()
-    if mp3_url:
-        response.play(mp3_url)
-    else:
-        response.say(ai_text)
-    
-    gather = Gather(input="speech", action="/process", timeout=6)
-    gather.say("How can I help you?")
-    response.append(gather)
-    response.say("Thank you for your time. Goodbye.")
-    response.hangup()
-    return Response(str(response), mimetype="application/xml")
+    threading.Thread(target=initiate_calls, args=(numbers,)).start()
+    return "Calls initiated."
 
+# ✅ Initiate outbound calls
 
-@app.route("/process", methods=["POST"])
-def process():
-    speech = request.form.get("SpeechResult", "")
-    print(f"🗣️ Customer asked: {speech}")
-
-    if speech:
-        reply = gpt_response(speech)
-        mp3_url = generate_tts_mp3(reply)
-
-        response = VoiceResponse()
-        if mp3_url:
-            response.play(mp3_url)
-        else:
-            response.say(reply)
-        response.hangup()
-        return Response(str(response), mimetype="application/xml")
-    else:
-        res = VoiceResponse()
-        res.say("Sorry, I didn't catch that. Goodbye.")
-        res.hangup()
-        return Response(str(res), mimetype="application/xml")
-
-
-@app.route("/callback", methods=["POST"])
-def callback():
-    print("📞 Call ended.")
-    call_next()
-    return "OK"
-
-
-@app.route("/audio/<filename>")
-def serve_audio(filename):
-    return send_from_directory(VOICE_DIR, filename)
-
-
-# === Utility Functions ===
-
-def call_next():
-    global is_calling
-    if is_calling or not call_queue:
-        return
-    is_calling = True
-    while call_queue:
-        number = call_queue.pop(0)
-        print(f"📞 Calling {number}")
+def initiate_calls(numbers):
+    for number in numbers:
+        print(f"📞 Calling {number}...")
         try:
-            client.calls.create(
+            call = client.calls.create(
                 to=number,
                 from_=TWILIO_NUMBER,
-                url=f"{FLASK_DOMAIN}/voice",
-                status_callback=f"{FLASK_DOMAIN}/callback",
-                status_callback_method="POST",
-                status_callback_event=["completed"]
+                url=f"{FLASK_DOMAIN}/voice"
             )
+            print(f"✅ Call initiated: {call.sid}")
         except Exception as e:
             print(f"❌ Failed to call {number}: {e}")
-    is_calling = False
+        time.sleep(2)  # space out calls
 
+# ✅ TwiML that streams audio to media.py
+@app.route("/voice", methods=["POST"])
+def voice():
+    response = VoiceResponse()
+    connect = Connect()
+    connect.stream(url=MEDIA_SERVER_URL)
+    response.append(connect)
+    return Response(str(response), mimetype="application/xml")
 
-def gpt_response(prompt):
-    try:
-        res = openai.ChatCompletion.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You're a dispatch assistant. Explain your low-cost dispatch service and how it works."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        return res.choices[0].message.content
-    except Exception as e:
-        print(f"❌ GPT error: {e}")
-        return "Sorry, I had trouble understanding that."
-
-
-def generate_tts_mp3(text):
-    try:
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}"
-        headers = {
-            "xi-api-key": ELEVENLABS_API_KEY,
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "text": text,
-            "model_id": "eleven_monolingual_v1",
-            "voice_settings": {
-                "stability": 0.5,
-                "similarity_boost": 0.75
-            }
-        }
-
-        res = requests.post(url, headers=headers, json=payload)
-        if res.status_code == 200:
-            filename = f"audio_{int(time.time())}.mp3"
-            full_path = os.path.join(VOICE_DIR, filename)
-            with open(full_path, "wb") as f:
-                f.write(res.content)
-            return f"{FLASK_DOMAIN}/audio/{filename}"
-        else:
-            print("❌ ElevenLabs error:", res.text)
-    except Exception as e:
-        print(f"❌ TTS generation failed: {e}")
-    return None
-
-
+# ✅ Run Flask app
 if __name__ == "__main__":
-    os.makedirs(VOICE_DIR, exist_ok=True)
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=5000)
